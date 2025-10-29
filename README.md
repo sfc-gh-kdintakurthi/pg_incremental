@@ -106,6 +106,33 @@ When creating the pipeline, the command is executed immediately for all sequence
 
 The pipeline execution ensures that the range of sequence values is known to be safe, meaning that there are no more transactions that might produce sequence values that are within the range. This is ensured by waiting for concurrent write transactions before proceeding with the command. The size of the range is effectively the number of inserts since the last time the pipeline was executed up to the moment that the new pipeline execution started. This technique was first introduced on the [Citus Data blog](https://www.citusdata.com/blog/2018/06/14/scalable-incremental-data-aggregation/) by the author of this extension.
 
+#### Limiting batch size
+
+By default, sequence pipelines process all available sequence values in a single execution. For scenarios where large batches of data are uploaded at once (e.g., daily bulk imports), you can use the `max_batch_size` parameter to limit how many sequence IDs are processed per execution:
+
+```sql
+-- Process at most 10,000 events per execution to avoid long-running transactions
+select incremental.create_sequence_pipeline(
+  'event-aggregation',
+  'events',
+  $$
+    insert into events_agg
+    select date_trunc('day', event_time), count(*)
+    from events
+    where event_id between $1 and $2
+    group by 1
+    on conflict (day) do update set event_count = events_agg.event_count + excluded.event_count;
+  $$,
+  schedule := '* * * * *',     -- Run every minute
+  max_batch_size := 10000      -- Process max 10k rows per run
+);
+```
+
+With `max_batch_size` set, if 100,000 new events arrive, the pipeline will process them in chunks of 10,000 over multiple executions rather than all at once. This helps to:
+- Avoid long-running transactions
+- Provide more predictable resource usage
+- Allow incremental progress on large data uploads
+
 The benefit of sequence pipelines is that they can process the data in small incremental steps and it is agnostic to where the timestamps used in aggregations came from (i.e. late data is fine). The downside is that you almost always have to merge aggregates using an ON CONFLICT clause, and there are situations where that is not possible (e.g. exact distinct counts).
 
 Arguments of the `incremental.create_sequence_pipeline` function:
@@ -116,6 +143,7 @@ Arguments of the `incremental.create_sequence_pipeline` function:
 | `sequence_name`       | regclass | Name of a sequence or table with a sequence        | Required                     |
 | `command`             | text     | Pipeline command with $1 and $2 parameters         | Required                     |
 | `schedule`            | text     | pg\_cron schedule for periodic execution (or NULL) | `* * * * *` (every minute)   |
+| `max_batch_size`      | bigint   | Maximum number of sequence IDs to process per run  | NULL (unlimited)             |
 | `execute_immediately` | bool     | Execute command immediately for existing data      | `true`                       |
 
 ### Creating a time interval pipeline
@@ -256,12 +284,12 @@ See the last processed sequence number in a sequence pipeline:
 
 ```sql
 select * from incremental.sequence_pipelines ;
-┌─────────────────────┬────────────────────────────┬────────────────────────────────┐
-│    pipeline_name    │       sequence_name        │ last_processed_sequence_number │
-├─────────────────────┼────────────────────────────┼────────────────────────────────┤
-│ view-count-pipeline │ public.events_event_id_seq │                        3000000 │
-│ event-aggregation   │ events_event_id_seq        │                        1000000 │
-└─────────────────────┴────────────────────────────┴────────────────────────────────┘
+┌─────────────────────┬────────────────────────────┬────────────────────────────────┬────────────────┐
+│    pipeline_name    │       sequence_name        │ last_processed_sequence_number │ max_batch_size │
+├─────────────────────┼────────────────────────────┼────────────────────────────────┼────────────────┤
+│ view-count-pipeline │ public.events_event_id_seq │                        3000000 │                │
+│ event-aggregation   │ events_event_id_seq        │                        1000000 │          10000 │
+└─────────────────────┴────────────────────────────┴────────────────────────────────┴────────────────┘
 ```
 
 See the last processed time interval in a time interval pipeline:

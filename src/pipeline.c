@@ -61,7 +61,8 @@ incremental_create_sequence_pipeline(PG_FUNCTION_ARGS)
 	Oid			sequenceId = PG_GETARG_OID(1);
 	char	   *command = text_to_cstring(PG_GETARG_TEXT_P(2));
 	char	   *schedule = PG_ARGISNULL(3) ? NULL : text_to_cstring(PG_GETARG_TEXT_P(3));
-	bool		executeImmediately = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+	int64		maxBatchSize = PG_ARGISNULL(4) ? 0 : PG_GETARG_INT64(4);
+	bool		executeImmediately = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
 
 	char	   *searchPath = pstrdup(namespace_search_path);
 
@@ -110,7 +111,7 @@ incremental_create_sequence_pipeline(PG_FUNCTION_ARGS)
 	ParseQuery(command, paramTypes);
 
 	InsertPipeline(pipelineName, SEQUENCE_RANGE_PIPELINE, sourceRelationId, command, searchPath);
-	InitializeSequencePipelineState(pipelineName, sequenceId);
+	InitializeSequencePipelineState(pipelineName, sequenceId, maxBatchSize);
 
 	if (executeImmediately)
 		ExecutePipeline(pipelineName, SEQUENCE_RANGE_PIPELINE, command, searchPath);
