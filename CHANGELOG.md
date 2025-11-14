@@ -1,3 +1,8 @@
+### pg\_incremental v1.4.0 (October 29, 2025)
+
+* Add a `max_batch_size` argument to sequence pipelines to limit the number of sequence IDs processed per execution
+* Improves handling of large batch uploads by allowing incremental processing in manageable chunks
+
 ### pg\_incremental v1.3.0 (May 15, 2025)
 * Adds an incremental.skip\_file function to use for erroneuous files in file pipelines
 * Removes the hard dependency on pg\_cron at CREATE EXTENSION time

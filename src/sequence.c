@@ -40,7 +40,7 @@ PG_FUNCTION_INFO_V1(incremental_sequence_range);
  * InitializeSequencePipelineStats adds the initial sequence pipeline state.
  */
 void
-InitializeSequencePipelineState(char *pipelineName, Oid sequenceId)
+InitializeSequencePipelineState(char *pipelineName, Oid sequenceId, int64 maxBatchSize)
 {
 	Oid			savedUserId = InvalidOid;
 	int			savedSecurityContext = 0;
@@ -54,18 +54,19 @@ InitializeSequencePipelineState(char *pipelineName, Oid sequenceId)
 
 	char	   *query =
 		"insert into incremental.sequence_pipelines "
-		"(pipeline_name, sequence_name) "
-		"values ($1, $2)";
+		"(pipeline_name, sequence_name, max_batch_size) "
+		"values ($1, $2, $3)";
 
 	bool		readOnly = false;
 	int			tupleCount = 0;
-	int			argCount = 2;
-	Oid			argTypes[] = {TEXTOID, OIDOID};
+	int			argCount = 3;
+	Oid			argTypes[] = {TEXTOID, OIDOID, INT8OID};
 	Datum		argValues[] = {
 		CStringGetTextDatum(pipelineName),
-		ObjectIdGetDatum(sequenceId)
+		ObjectIdGetDatum(sequenceId),
+		Int64GetDatum(maxBatchSize)
 	};
-	char	   *argNulls = "   ";
+	char	   *argNulls = maxBatchSize > 0 ? "   " : "  n";
 
 	SPI_connect();
 	SPI_execute_with_args(query,
@@ -194,7 +195,8 @@ GetSequenceNumberRange(char *pipelineName)
 	char	   *query =
 		"select"
 		" last_processed_sequence_number + 1,"
-		" pg_catalog.pg_sequence_last_value(sequence_name) seq "
+		" pg_catalog.pg_sequence_last_value(sequence_name) seq,"
+		" max_batch_size "
 		"from incremental.sequence_pipelines "
 		"where pipeline_name operator(pg_catalog.=) $1 "
 		"for update";
@@ -238,6 +240,26 @@ GetSequenceNumberRange(char *pipelineName)
 
 	if (!rangeEndIsNull)
 		range->rangeEnd = DatumGetInt64(rangeEndDatum);
+
+	/* read max_batch_size and apply limit if set */
+	bool		maxBatchSizeIsNull = false;
+	Datum		maxBatchSizeDatum = SPI_getbinval(row, rowDesc, 3, &maxBatchSizeIsNull);
+
+	if (!maxBatchSizeIsNull)
+	{
+		int64		maxBatchSize = DatumGetInt64(maxBatchSizeDatum);
+
+		if (maxBatchSize > 0 && range->rangeStart <= range->rangeEnd)
+		{
+			uint64		availableRange = range->rangeEnd - range->rangeStart + 1;
+
+			if (availableRange > maxBatchSize)
+			{
+				/* limit the range to max_batch_size */
+				range->rangeEnd = range->rangeStart + maxBatchSize - 1;
+			}
+		}
+	}
 
 	SPI_finish();
 

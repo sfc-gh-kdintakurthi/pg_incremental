@@ -59,3 +59,5 @@ results/
 src/*.bc
 regression.diffs
 regression.out
+
+.claude
