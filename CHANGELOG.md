@@ -1,3 +1,7 @@
+### pg\_incremental v1.4.1 (December 12, 2025)
+
+* Use `lake_file.list` as the default file list function, fallback to crunchy
+
 ### pg\_incremental v1.4.0 (October 29, 2025)
 
 * Add a `max_batch_size` argument to sequence pipelines to limit the number of sequence IDs processed per execution
