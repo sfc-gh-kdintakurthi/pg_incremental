@@ -221,12 +221,29 @@ incremental_create_file_list_pipeline(PG_FUNCTION_ARGS)
 	char	   *pipelineName = text_to_cstring(PG_GETARG_TEXT_P(0));
 	char	   *prefix = text_to_cstring(PG_GETARG_TEXT_P(1));
 	char	   *command = text_to_cstring(PG_GETARG_TEXT_P(2));
-	char	   *listFunction = PG_ARGISNULL(3) ? DefaultFileListFunction : text_to_cstring(PG_GETARG_TEXT_P(3));
+	char	   *listFunction = PG_ARGISNULL(3) ? NULL : text_to_cstring(PG_GETARG_TEXT_P(3));
 	bool		batched = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 	int			maxBatchSize = PG_ARGISNULL(5) ? 0 : PG_GETARG_INT32(5);
 	char	   *schedule = PG_ARGISNULL(6) ? NULL : text_to_cstring(PG_GETARG_TEXT_P(6));
 	bool		executeImmediately = PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7);
 	char	   *searchPath = pstrdup(namespace_search_path);
+
+	if (listFunction == NULL)
+	{
+		/*
+		 * Default to pg_lake, but fall back to original list function
+		 * if it does not exist for backwards compatibility.
+		 */
+		if (strcmp(DefaultFileListFunction, DEFAULT_FILE_LIST_FUNCTION) == 0 &&
+			!ListFunctionExists(DefaultFileListFunction))
+		{
+			listFunction = ORIGINAL_DEFAULT_FILE_LIST_FUNCTION;
+		}
+		else
+		{
+			listFunction = DefaultFileListFunction;
+		}
+	}
 
 	/* validate and sanitize function name */
 	listFunction = SanitizeListFunction(listFunction);

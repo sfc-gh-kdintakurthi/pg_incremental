@@ -542,6 +542,26 @@ RemoveProcessedFileList(char *pipelineName)
 
 
 /*
+ * ListFunctionExists determines whether the given list function
+ * exists.
+ */
+bool
+ListFunctionExists(char *listFunction)
+{
+#if (PG_VERSION_NUM >= 160000)
+	List	   *names = stringToQualifiedNameList(listFunction, NULL);
+#else
+	List	   *names = stringToQualifiedNameList(listFunction);
+#endif
+	Oid			argTypes[] = {TEXTOID};
+	bool		missingOk = true;
+	Oid			functionId = LookupFuncName(names, 1, argTypes, missingOk);
+
+	return OidIsValid(functionId);
+}
+
+
+/*
  * SanitizeListFunction qualifies a list function name and errors
  * if the function cannot be found.
  */
