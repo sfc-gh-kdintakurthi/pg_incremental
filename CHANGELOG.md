@@ -1,3 +1,7 @@
+### pg\_incremental v1.5.0 (April 1, 2026)
+
+* Add `max_batches_per_run` to file list pipelines (`incremental.create_file_list_pipeline` and `incremental.file_list_pipelines`). Default `-1` means a single `execute_pipeline` run processes all unprocessed paths in that invocation; a positive value limits how many batch iterations run per call (one file per iteration when not batched, one array batch when batched).
+
 ### pg\_incremental v1.4.1 (December 12, 2025)
 
 * Use `lake_file.list` as the default file list function, fallback to crunchy

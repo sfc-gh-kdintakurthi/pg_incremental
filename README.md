@@ -226,7 +226,7 @@ Arguments of the `incremental.create_time_range_pipeline` function:
 
 ### Creating a file list pipeline
 
-You can define a file list pipeline with the `incremental.create_file_list_pipeline` function by specifying a generic pipeline name, a file pattern, and a command. The command will be executed in a context where `$1` is set to the path of a file (text). The pipeline periodically looks for new files returned by a list function and then executes the command for each new file.
+You can define a file list pipeline with the `incremental.create_file_list_pipeline` function by specifying a generic pipeline name, a file pattern, and a command. When the pipeline is not batched, the command runs with `$1` set to the path of a file (`text`). When batched, `$1` is a `text[]` of paths. Each call to `incremental.execute_pipeline` (or each pg\_cron run) lists unprocessed paths from your list function and runs the command up to **`max_batches_per_run`** times in that invocation: `-1` (default) means no limit—process every file (every batch when batched) in that run; a positive integer caps how many batch iterations run—each iteration is one file when not batched, or one array batch when batched. Remaining paths wait for the next run.
 
 Example:
 ```sql
@@ -253,12 +253,13 @@ Arguments of the `incremental.create_file_list_pipeline` function:
 | --------------------- | ----------- | --------------------------------------------------- | ---------------------------------- |
 | `pipeline_name`       | text        | User-defined name of the pipeline                   | Required                           |
 | `file_pattern`        | text        | File pattern to pass to the list function           | Required                           |
-| `command`             | text        | Pipeline command with $1 and $2 parameters          | Required                           |
+| `command`             | text        | Pipeline command; `$1` is file path (`text`) or path array (`text[]`) when batched | Required                           |
 | `list_function`       | text        | Name of the function used to list files             | `crunchy_lake.list_files`          |
 | `batched`             | bool        | Whether to pass in a batch of files as an array     | `false`                            |
 | `max_batch_size`      | int         | If batched, maximum length of the array             | 100                                |
 | `schedule`            | text        | pg\_cron schedule for periodic execution (or NULL)  | `*/15 * * * *` (every 15 minutes)  |
 | `execute_immediately` | bool        | Execute command immediately for existing data       | `true`                             |
+| `max_batches_per_run` | int         | Max batch iterations per `execute_pipeline` call: `-1` = no limit (process full backlog in that run); a positive integer caps how many files (non-batched) or array batches (batched) run in that call | `-1`                               |
 
 Instead of using the argument, you can also change the default list function via the `incremental.default_file_list_function` setting:
 
@@ -306,11 +307,11 @@ select * from incremental.time_interval_pipelines;
 See the processed files in a file list pipeline:
 ```sql
 select * from incremental.file_list_pipelines ;
-┌───────────────┬─────────────────────────────────────┬─────────┬─────────────────────────┐
-│ pipeline_name │            file_pattern             │ batched │      list_function      │
-├───────────────┼─────────────────────────────────────┼─────────┼─────────────────────────┤
-│ event-import  │ s3://marco-crunchy-data/inbox/*.csv │ f       │ crunchy_lake.list_files │
-└───────────────┴─────────────────────────────────────┴─────────┴─────────────────────────┘
+┌───────────────┬─────────────────────────────────────┬─────────┬─────────────────────────┬────────────────┬──────────────────────────┐
+│ pipeline_name │            file_pattern             │ batched │      list_function      │ max_batch_size │ max_batches_per_run │
+├───────────────┼─────────────────────────────────────┼─────────┼─────────────────────────┼────────────────┼─────────────────────┤
+│ event-import  │ s3://marco-crunchy-data/inbox/*.csv │ f       │ crunchy_lake.list_files │                │                  -1 │
+└───────────────┴─────────────────────────────────────┴─────────┴─────────────────────────┴────────────────┴─────────────────────┘
 
 select * from incremental.processed_files ;
 ┌───────────────┬────────────────────────────────────────────┐
