@@ -1,5 +1,4 @@
 create extension pg_incremental cascade;
-NOTICE:  installing required extension "pg_cron"
 create schema sequence;
 set search_path to sequence;
 -- create a source table

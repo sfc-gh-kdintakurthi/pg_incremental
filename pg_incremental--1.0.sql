@@ -160,7 +160,9 @@ DECLARE
 BEGIN
     FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects() LOOP
         IF obj.object_identity = 'pg_incremental' AND obj.object_type = 'extension' THEN
-            PERFORM cron.unschedule(jobname) FROM cron.job WHERE jobname LIKE 'pipeline:%';
+            IF EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'pg_cron') THEN
+                PERFORM cron.unschedule(jobname) FROM cron.job WHERE jobname LIKE 'pipeline:%';
+            END IF;
             DROP SCHEMA incremental CASCADE;
         END IF;
     END LOOP;
